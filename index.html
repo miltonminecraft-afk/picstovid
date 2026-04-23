@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZIP to MP4 Converter</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --panel-2: #1f2430;
+      --text: #f3f5f7;
+      --muted: #a8b0bd;
+      --accent: #6ea8fe;
+      --border: #2b3240;
+      --success: #3fb950;
+      --danger: #ff6b6b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: linear-gradient(180deg, #0c0f14 0%, #121722 100%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .wrap {
+      width: min(980px, calc(100% - 32px));
+      margin: 32px auto;
+    }
+
+    .card {
+      background: rgba(23, 26, 33, 0.95);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(8px);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 32px;
+      line-height: 1.15;
+    }
+
+    p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 180px 180px;
+      gap: 14px;
+      margin-top: 18px;
+      align-items: end;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    input[type="file"],
+    input[type="number"],
+    input[type="text"],
+    button {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 14px 14px;
+      font-size: 15px;
+    }
+
+    input[type="file"] {
+      padding: 10px;
+    }
+
+    button {
+      cursor: pointer;
+      background: var(--accent);
+      color: #08111f;
+      font-weight: 700;
+      border: none;
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .secondary {
+      background: #2d3647;
+      color: var(--text);
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+
+    .pill {
+      padding: 10px 12px;
+      border-radius: 999px;
+      background: #131924;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .status {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: #10151f;
+      border: 1px solid var(--border);
+      white-space: pre-wrap;
+      line-height: 1.5;
+      color: var(--text);
+      min-height: 56px;
+    }
+
+    .progress-wrap {
+      margin-top: 14px;
+      width: 100%;
+      height: 12px;
+      background: #0f141d;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #4f8cff 0%, #77b0ff 100%);
+      transition: width 0.2s ease;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+
+    a.download {
+      display: none;
+      text-decoration: none;
+      padding: 14px 18px;
+      border-radius: 12px;
+      background: var(--success);
+      color: #08140c;
+      font-weight: 700;
+    }
+
+    video {
+      margin-top: 22px;
+      width: 100%;
+      max-height: 520px;
+      border-radius: 16px;
+      background: #000;
+      border: 1px solid var(--border);
+    }
+
+    .hint {
+      margin-top: 16px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .danger {
+      color: var(--danger);
+    }
+
+    @media (max-width: 760px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>ZIP to MP4 Converter</h1>
+      <p>Upload a ZIP file with sequential image frames such as frame_000.jpg, frame_001.jpg, frame_002.jpg. The conversion runs in your browser.</p>
+
+      <div class="grid">
+        <div>
+          <label for="zipFile">ZIP file with frames</label>
+          <input id="zipFile" type="file" accept=".zip,application/zip" />
+        </div>
+        <div>
+          <label for="fps">Frames per second</label>
+          <input id="fps" type="number" min="1" max="120" step="1" value="24" />
+        </div>
+        <div>
+          <label for="outputName">Output file name</label>
+          <input id="outputName" type="text" value="output.mp4" />
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="loadBtn" class="secondary">Load converter</button>
+        <button id="convertBtn" disabled>Convert ZIP to MP4</button>
+        <a id="downloadLink" class="download" download="output.mp4">Download MP4</a>
+      </div>
+
+      <div class="row">
+        <div class="pill" id="engineState">Engine: not loaded</div>
+        <div class="pill" id="frameCount">Frames: 0</div>
+        <div class="pill" id="zipState">ZIP: none</div>
+      </div>
+
+      <div class="progress-wrap">
+        <div id="progressBar" class="progress-bar"></div>
+      </div>
+
+      <div id="status" class="status">Waiting for input.</div>
+
+      <video id="preview" controls></video>
+
+      <div class="hint">
+        Best results: use same image dimensions for all frames and consistent naming. Example: frame_0001.jpg to frame_0240.jpg.
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script type="module">
+    import { FFmpeg } from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js";
+    import { toBlobURL, fetchFile } from "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/esm/index.js";
+
+    const loadBtn = document.getElementById("loadBtn");
+    const convertBtn = document.getElementById("convertBtn");
+    const zipFileInput = document.getElementById("zipFile");
+    const fpsInput = document.getElementById("fps");
+    const outputNameInput = document.getElementById("outputName");
+    const statusEl = document.getElementById("status");
+    const progressBar = document.getElementById("progressBar");
+    const preview = document.getElementById("preview");
+    const downloadLink = document.getElementById("downloadLink");
+    const engineState = document.getElementById("engineState");
+    const frameCount = document.getElementById("frameCount");
+    const zipState = document.getElementById("zipState");
+
+    let ffmpeg = null;
+    let ffmpegLoaded = false;
+    let currentOutputUrl = null;
+
+    function setStatus(message) {
+      statusEl.textContent = message;
+    }
+
+    function setProgress(value) {
+      const percent = Math.max(0, Math.min(100, value));
+      progressBar.style.width = percent + "%";
+    }
+
+    function naturalSort(a, b) {
+      return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+    }
+
+    async function loadFFmpeg() {
+      if (ffmpegLoaded) {
+        setStatus("Converter is already loaded.");
+        return;
+      }
+
+      loadBtn.disabled = true;
+      setStatus("Loading FFmpeg core. This can take a while the first time.");
+      setProgress(5);
+
+      try {
+        ffmpeg = new FFmpeg();
+
+        ffmpeg.on("log", ({ message }) => {
+          setStatus(message);
+        });
+
+        ffmpeg.on("progress", ({ progress }) => {
+          setProgress(progress * 100);
+        });
+
+        const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
+
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm")
+        });
+
+        ffmpegLoaded = true;
+        engineState.textContent = "Engine: loaded";
+        loadBtn.textContent = "Converter loaded";
+        convertBtn.disabled = false;
+        setProgress(100);
+        setStatus("Converter loaded. You can now upload a ZIP and start conversion.");
+      } catch (error) {
+        loadBtn.disabled = false;
+        setProgress(0);
+        setStatus("Failed to load converter:\n" + (error?.message || String(error)));
+      }
+    }
+
+    async function extractFramesFromZip(file) {
+      const zip = await JSZip.loadAsync(file);
+      const entries = [];
+
+      zip.forEach((relativePath, zipEntry) => {
+        if (zipEntry.dir) return;
+        const lower = zipEntry.name.toLowerCase();
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")) {
+          entries.push(zipEntry);
+        }
+      });
+
+      entries.sort((a, b) => naturalSort(a.name, b.name));
+
+      if (!entries.length) {
+        throw new Error("No JPG, JPEG, or PNG frames were found in the ZIP.");
+      }
+
+      return entries;
+    }
+
+    async function clearFfmpegFiles() {
+      const filesToTry = [
+        "frames.txt",
+        "output.mp4"
+      ];
+
+      for (const file of filesToTry) {
+        try {
+          await ffmpeg.deleteFile(file);
+        } catch {}
+
+      }
+
+      for (let i = 0; i < 10000; i++) {
+        const jpgName = `frame_${String(i).padStart(6, "0")}.jpg`;
+        const pngName = `frame_${String(i).padStart(6, "0")}.png`;
+
+        try {
+          await ffmpeg.deleteFile(jpgName);
+        } catch {}
+
+        try {
+          await ffmpeg.deleteFile(pngName);
+        } catch {}
+      }
+    }
+
+    async function convertZipToMp4() {
+      const zipFile = zipFileInput.files?.[0];
+      const fps = Number(fpsInput.value);
+      let outputName = outputNameInput.value.trim();
+
+      if (!ffmpegLoaded) {
+        setStatus("Load the converter first.");
+        return;
+      }
+
+      if (!zipFile) {
+        setStatus("Choose a ZIP file first.");
+        return;
+      }
+
+      if (!Number.isFinite(fps) || fps < 1 || fps > 120) {
+        setStatus("FPS must be a number between 1 and 120.");
+        return;
+      }
+
+      if (!outputName) {
+        outputName = "output.mp4";
+        outputNameInput.value = outputName;
+      }
+
+      if (!outputName.toLowerCase().endsWith(".mp4")) {
+        outputName += ".mp4";
+        outputNameInput.value = outputName;
+      }
+
+      convertBtn.disabled = true;
+      downloadLink.style.display = "none";
+      preview.removeAttribute("src");
+      preview.load();
+
+      if (currentOutputUrl) {
+        URL.revokeObjectURL(currentOutputUrl);
+        currentOutputUrl = null;
+      }
+
+      try {
+        setProgress(0);
+        setStatus("Reading ZIP file...");
+        zipState.textContent = `ZIP: ${zipFile.name}`;
+
+        const frameEntries = await extractFramesFromZip(zipFile);
+        frameCount.textContent = `Frames: ${frameEntries.length}`;
+
+        await clearFfmpegFiles();
+
+        const firstIsPng = frameEntries[0].name.toLowerCase().endsWith(".png");
+        const extension = firstIsPng ? "png" : "jpg";
+
+        for (let i = 0; i < frameEntries.length; i++) {
+          const entry = frameEntries[i];
+          const data = await entry.async("uint8array");
+          const targetName = `frame_${String(i).padStart(6, "0")}.${extension}`;
+          await ffmpeg.writeFile(targetName, data);
+          const uploadProgress = ((i + 1) / frameEntries.length) * 35;
+          setProgress(uploadProgress);
+          setStatus(`Loaded frame ${i + 1} of ${frameEntries.length}: ${entry.name}`);
+        }
+
+        setStatus("Encoding MP4...");
+        setProgress(40);
+
+        const inputPattern = `frame_%06d.${extension}`;
+
+        await ffmpeg.exec([
+          "-framerate", String(fps),
+          "-i", inputPattern,
+          "-c:v", "libx264",
+          "-pix_fmt", "yuv420p",
+          "-movflags", "+faststart",
+          "-crf", "18",
+          "-preset", "medium",
+          "output.mp4"
+        ]);
+
+        const outputData = await ffmpeg.readFile("output.mp4");
+        const blob = new Blob([outputData.buffer], { type: "video/mp4" });
+        currentOutputUrl = URL.createObjectURL(blob);
+
+        preview.src = currentOutputUrl;
+        downloadLink.href = currentOutputUrl;
+        downloadLink.download = outputName;
+        downloadLink.style.display = "inline-flex";
+        setProgress(100);
+        setStatus(`Done. MP4 created successfully from ${frameEntries.length} frames at ${fps} fps.`);
+      } catch (error) {
+        setProgress(0);
+        setStatus("Conversion failed:\n" + (error?.message || String(error)));
+      } finally {
+        convertBtn.disabled = false;
+      }
+    }
+
+    loadBtn.addEventListener("click", loadFFmpeg);
+    convertBtn.addEventListener("click", convertZipToMp4);
+
+    zipFileInput.addEventListener("change", async () => {
+      const zipFile = zipFileInput.files?.[0];
+      if (!zipFile) {
+        zipState.textContent = "ZIP: none";
+        frameCount.textContent = "Frames: 0";
+        return;
+      }
+
+      zipState.textContent = `ZIP: ${zipFile.name}`;
+
+      try {
+        const entries = await extractFramesFromZip(zipFile);
+        frameCount.textContent = `Frames: ${entries.length}`;
+        setStatus(`ZIP loaded. Found ${entries.length} image frames.`);
+      } catch (error) {
+        frameCount.textContent = "Frames: 0";
+        setStatus("Could not read ZIP:\n" + (error?.message || String(error)));
+      }
+    });
+  </script>
+</body>
+</html>
