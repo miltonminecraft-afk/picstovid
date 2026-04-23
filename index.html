@@ -188,10 +188,6 @@
       color: var(--muted);
     }
 
-    .danger {
-      color: var(--danger);
-    }
-
     @media (max-width: 760px) {
       .grid {
         grid-template-columns: 1fr;
@@ -247,9 +243,10 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
   <script type="module">
-    import { FFmpeg } from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js";
-    import { toBlobURL, fetchFile } from "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/esm/index.js";
+    import { FFmpeg } from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js";
+    import { toBlobURL } from "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js";
 
     const loadBtn = document.getElementById("loadBtn");
     const convertBtn = document.getElementById("convertBtn");
@@ -288,7 +285,7 @@
       }
 
       loadBtn.disabled = true;
-      setStatus("Loading FFmpeg core. This can take a while the first time.");
+      setStatus("Loading FFmpeg core...");
       setProgress(5);
 
       try {
@@ -299,14 +296,26 @@
         });
 
         ffmpeg.on("progress", ({ progress }) => {
-          setProgress(progress * 100);
+          if (typeof progress === "number") {
+            setProgress(progress * 100);
+          }
         });
 
-        const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
+        const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
+
+        const [coreURL, wasmURL, workerURL] = await Promise.all([
+          toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+          toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+          toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, "text/javascript")
+        ]);
+
+        const classWorkerURL = `${window.location.origin}${window.location.pathname.replace(/\/[^/]*$/, "/")}ffmpeg/worker.js`;
 
         await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm")
+          coreURL,
+          wasmURL,
+          workerURL,
+          classWorkerURL
         });
 
         ffmpegLoaded = true;
@@ -314,7 +323,7 @@
         loadBtn.textContent = "Converter loaded";
         convertBtn.disabled = false;
         setProgress(100);
-        setStatus("Converter loaded. You can now upload a ZIP and start conversion.");
+        setStatus("Converter loaded successfully.");
       } catch (error) {
         loadBtn.disabled = false;
         setProgress(0);
@@ -343,30 +352,18 @@
       return entries;
     }
 
-    async function clearFfmpegFiles() {
-      const filesToTry = [
-        "frames.txt",
-        "output.mp4"
-      ];
+    async function tryDelete(path) {
+      try {
+        await ffmpeg.deleteFile(path);
+      } catch {}
+    }
 
-      for (const file of filesToTry) {
-        try {
-          await ffmpeg.deleteFile(file);
-        } catch {}
+    async function clearFfmpegFiles(frameEntries) {
+      await tryDelete("output.mp4");
 
-      }
-
-      for (let i = 0; i < 10000; i++) {
-        const jpgName = `frame_${String(i).padStart(6, "0")}.jpg`;
-        const pngName = `frame_${String(i).padStart(6, "0")}.png`;
-
-        try {
-          await ffmpeg.deleteFile(jpgName);
-        } catch {}
-
-        try {
-          await ffmpeg.deleteFile(pngName);
-        } catch {}
+      for (let i = 0; i < frameEntries.length; i++) {
+        await tryDelete(`frame_${String(i).padStart(6, "0")}.jpg`);
+        await tryDelete(`frame_${String(i).padStart(6, "0")}.png`);
       }
     }
 
@@ -418,10 +415,9 @@
         const frameEntries = await extractFramesFromZip(zipFile);
         frameCount.textContent = `Frames: ${frameEntries.length}`;
 
-        await clearFfmpegFiles();
+        await clearFfmpegFiles(frameEntries);
 
-        const firstIsPng = frameEntries[0].name.toLowerCase().endsWith(".png");
-        const extension = firstIsPng ? "png" : "jpg";
+        const extension = frameEntries[0].name.toLowerCase().endsWith(".png") ? "png" : "jpg";
 
         for (let i = 0; i < frameEntries.length; i++) {
           const entry = frameEntries[i];
@@ -436,16 +432,15 @@
         setStatus("Encoding MP4...");
         setProgress(40);
 
-        const inputPattern = `frame_%06d.${extension}`;
-
         await ffmpeg.exec([
           "-framerate", String(fps),
-          "-i", inputPattern,
+          "-i", `frame_%06d.${extension}`,
           "-c:v", "libx264",
           "-pix_fmt", "yuv420p",
           "-movflags", "+faststart",
           "-crf", "18",
           "-preset", "medium",
+          "-threads", "1",
           "output.mp4"
         ]);
 
@@ -457,6 +452,7 @@
         downloadLink.href = currentOutputUrl;
         downloadLink.download = outputName;
         downloadLink.style.display = "inline-flex";
+
         setProgress(100);
         setStatus(`Done. MP4 created successfully from ${frameEntries.length} frames at ${fps} fps.`);
       } catch (error) {
@@ -472,6 +468,7 @@
 
     zipFileInput.addEventListener("change", async () => {
       const zipFile = zipFileInput.files?.[0];
+
       if (!zipFile) {
         zipState.textContent = "ZIP: none";
         frameCount.textContent = "Frames: 0";
