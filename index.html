@@ -30,7 +30,7 @@
     }
 
     .wrap {
-      width: min(980px, calc(100% - 32px));
+      width: min(1080px, calc(100% - 32px));
       margin: 32px auto;
     }
 
@@ -57,9 +57,17 @@
 
     .grid {
       display: grid;
-      grid-template-columns: 1fr 180px 180px;
+      grid-template-columns: 1.5fr 140px 140px 180px;
       gap: 14px;
       margin-top: 18px;
+      align-items: end;
+    }
+
+    .grid-advanced {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-top: 14px;
       align-items: end;
     }
 
@@ -73,6 +81,7 @@
     input[type="file"],
     input[type="number"],
     input[type="text"],
+    select,
     button {
       width: 100%;
       border-radius: 12px;
@@ -85,6 +94,11 @@
 
     input[type="file"] {
       padding: 10px;
+    }
+
+    input[type="checkbox"] {
+      transform: scale(1.15);
+      margin-right: 10px;
     }
 
     button {
@@ -188,8 +202,53 @@
       color: var(--muted);
     }
 
-    @media (max-width: 760px) {
-      .grid {
+    .option-box {
+      margin-top: 18px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #10151f;
+    }
+
+    .option-line {
+      display: flex;
+      align-items: center;
+      color: var(--text);
+      font-size: 15px;
+    }
+
+    .thumbs {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 10px;
+    }
+
+    .thumb {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #0e131c;
+    }
+
+    .thumb img {
+      width: 100%;
+      height: 90px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .thumb span {
+      display: block;
+      padding: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      .grid,
+      .grid-advanced {
         grid-template-columns: 1fr;
       }
     }
@@ -199,11 +258,11 @@
   <div class="wrap">
     <div class="card">
       <h1>ZIP to MP4 Converter</h1>
-      <p>Upload a ZIP file with sequential image frames such as frame_000.jpg, frame_001.jpg, frame_002.jpg. The conversion runs in your browser.</p>
+      <p>Upload a ZIP with image frames or keyframes. The conversion runs in your browser and can automatically interpolate a small keyframe set into a full video sequence.</p>
 
       <div class="grid">
         <div>
-          <label for="zipFile">ZIP file with frames</label>
+          <label for="zipFile">ZIP file with frames or keyframes</label>
           <input id="zipFile" type="file" accept=".zip,application/zip" />
         </div>
         <div>
@@ -211,8 +270,41 @@
           <input id="fps" type="number" min="1" max="120" step="1" value="24" />
         </div>
         <div>
+          <label for="duration">Duration (seconds)</label>
+          <input id="duration" type="number" min="1" max="300" step="1" value="10" />
+        </div>
+        <div>
           <label for="outputName">Output file name</label>
           <input id="outputName" type="text" value="output.mp4" />
+        </div>
+      </div>
+
+      <div class="option-box">
+        <div class="option-line">
+          <input id="interpolateMode" type="checkbox" checked />
+          <label for="interpolateMode" style="margin: 0; color: var(--text);">Interpolate uploaded images into a full frame sequence before encoding</label>
+        </div>
+
+        <div class="grid-advanced">
+          <div>
+            <label for="fitMode">Image fit mode</label>
+            <select id="fitMode">
+              <option value="cover" selected>Cover</option>
+              <option value="contain">Contain</option>
+            </select>
+          </div>
+          <div>
+            <label for="outWidth">Output width</label>
+            <input id="outWidth" type="number" min="64" max="4096" step="1" value="1280" />
+          </div>
+          <div>
+            <label for="outHeight">Output height</label>
+            <input id="outHeight" type="number" min="64" max="4096" step="1" value="720" />
+          </div>
+          <div>
+            <label for="jpegQuality">JPEG quality</label>
+            <input id="jpegQuality" type="number" min="0.5" max="1" step="0.01" value="0.92" />
+          </div>
         </div>
       </div>
 
@@ -224,8 +316,9 @@
 
       <div class="row">
         <div class="pill" id="engineState">Engine: not loaded</div>
-        <div class="pill" id="frameCount">Frames: 0</div>
         <div class="pill" id="zipState">ZIP: none</div>
+        <div class="pill" id="imageCount">Images: 0</div>
+        <div class="pill" id="frameCount">Frames to encode: 0</div>
       </div>
 
       <div class="progress-wrap">
@@ -234,10 +327,12 @@
 
       <div id="status" class="status">Waiting for input.</div>
 
+      <div id="thumbs" class="thumbs"></div>
+
       <video id="preview" controls></video>
 
       <div class="hint">
-        Best results: use same image dimensions for all frames and consistent naming. Example: frame_0001.jpg to frame_0240.jpg.
+        For keyframe mode, upload a ZIP such as frame_000.jpg to frame_015.jpg. The tool will expand them to duration × fps frames before encoding.
       </div>
     </div>
   </div>
@@ -252,14 +347,22 @@
     const convertBtn = document.getElementById("convertBtn");
     const zipFileInput = document.getElementById("zipFile");
     const fpsInput = document.getElementById("fps");
+    const durationInput = document.getElementById("duration");
     const outputNameInput = document.getElementById("outputName");
+    const interpolateModeInput = document.getElementById("interpolateMode");
+    const fitModeInput = document.getElementById("fitMode");
+    const outWidthInput = document.getElementById("outWidth");
+    const outHeightInput = document.getElementById("outHeight");
+    const jpegQualityInput = document.getElementById("jpegQuality");
     const statusEl = document.getElementById("status");
     const progressBar = document.getElementById("progressBar");
     const preview = document.getElementById("preview");
     const downloadLink = document.getElementById("downloadLink");
     const engineState = document.getElementById("engineState");
-    const frameCount = document.getElementById("frameCount");
     const zipState = document.getElementById("zipState");
+    const imageCount = document.getElementById("imageCount");
+    const frameCount = document.getElementById("frameCount");
+    const thumbs = document.getElementById("thumbs");
 
     let ffmpeg = null;
     let ffmpegLoaded = false;
@@ -278,6 +381,10 @@
       return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
     }
 
+    function getBaseDir() {
+      return window.location.href.replace(/[^/]*$/, "");
+    }
+
     async function loadFFmpeg() {
       if (ffmpegLoaded) {
         setStatus("Converter is already loaded.");
@@ -292,24 +399,23 @@
         ffmpeg = new FFmpeg();
 
         ffmpeg.on("log", ({ message }) => {
-          setStatus(message);
+          if (message) setStatus(message);
         });
 
         ffmpeg.on("progress", ({ progress }) => {
           if (typeof progress === "number") {
-            setProgress(progress * 100);
+            setProgress(Math.max(40, progress * 100));
           }
         });
 
         const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
-
         const [coreURL, wasmURL, workerURL] = await Promise.all([
           toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
           toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
           toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, "text/javascript")
         ]);
 
-        const classWorkerURL = `${window.location.origin}${window.location.pathname.replace(/\/[^/]*$/, "/")}ffmpeg/worker.js`;
+        const classWorkerURL = `${getBaseDir()}ffmpeg/worker.js`;
 
         await ffmpeg.load({
           coreURL,
@@ -331,14 +437,14 @@
       }
     }
 
-    async function extractFramesFromZip(file) {
+    async function extractImagesFromZip(file) {
       const zip = await JSZip.loadAsync(file);
       const entries = [];
 
       zip.forEach((relativePath, zipEntry) => {
         if (zipEntry.dir) return;
         const lower = zipEntry.name.toLowerCase();
-        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")) {
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".webp")) {
           entries.push(zipEntry);
         }
       });
@@ -346,10 +452,127 @@
       entries.sort((a, b) => naturalSort(a.name, b.name));
 
       if (!entries.length) {
-        throw new Error("No JPG, JPEG, or PNG frames were found in the ZIP.");
+        throw new Error("No JPG, JPEG, PNG or WEBP images were found in the ZIP.");
       }
 
       return entries;
+    }
+
+    function createImageBitmapFromBlob(blob) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(blob);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          resolve(img);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error("Could not decode image."));
+        };
+        img.src = url;
+      });
+    }
+
+    function drawFit(ctx, img, canvasWidth, canvasHeight, fitMode) {
+      const iw = img.naturalWidth || img.width;
+      const ih = img.naturalHeight || img.height;
+
+      if (!iw || !ih) {
+        throw new Error("Invalid image dimensions.");
+      }
+
+      const scale = fitMode === "contain"
+        ? Math.min(canvasWidth / iw, canvasHeight / ih)
+        : Math.max(canvasWidth / iw, canvasHeight / ih);
+
+      const drawWidth = iw * scale;
+      const drawHeight = ih * scale;
+      const dx = (canvasWidth - drawWidth) / 2;
+      const dy = (canvasHeight - drawHeight) / 2;
+
+      ctx.drawImage(img, dx, dy, drawWidth, drawHeight);
+    }
+
+    async function readZipImages(entries) {
+      const result = [];
+
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        const blob = await entry.async("blob");
+        const image = await createImageBitmapFromBlob(blob);
+        result.push({
+          name: entry.name,
+          blob,
+          image
+        });
+      }
+
+      return result;
+    }
+
+    function dataUrlToUint8Array(dataUrl) {
+      const base64 = dataUrl.split(",")[1];
+      const binary = atob(base64);
+      const length = binary.length;
+      const bytes = new Uint8Array(length);
+      for (let i = 0; i < length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes;
+    }
+
+    function renderInterpolatedFrames(images, targetFrameTotal, width, height, fitMode, jpegQuality) {
+      if (!images.length) {
+        throw new Error("No source images available.");
+      }
+
+      if (images.length === 1) {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        const rendered = [];
+
+        for (let i = 0; i < targetFrameTotal; i++) {
+          ctx.clearRect(0, 0, width, height);
+          drawFit(ctx, images[0].image, width, height, fitMode);
+          const dataUrl = canvas.toDataURL("image/jpeg", jpegQuality);
+          rendered.push(dataUrlToUint8Array(dataUrl));
+        }
+
+        return rendered;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      const rendered = [];
+      const lastIndex = images.length - 1;
+
+      for (let frameIndex = 0; frameIndex < targetFrameTotal; frameIndex++) {
+        const tGlobal = targetFrameTotal === 1 ? 0 : frameIndex / (targetFrameTotal - 1);
+        const mapped = tGlobal * lastIndex;
+        const aIndex = Math.floor(mapped);
+        const bIndex = Math.min(lastIndex, aIndex + 1);
+        const localT = mapped - aIndex;
+
+        ctx.clearRect(0, 0, width, height);
+        ctx.globalAlpha = 1;
+        drawFit(ctx, images[aIndex].image, width, height, fitMode);
+
+        if (bIndex !== aIndex && localT > 0) {
+          ctx.globalAlpha = localT;
+          drawFit(ctx, images[bIndex].image, width, height, fitMode);
+          ctx.globalAlpha = 1;
+        }
+
+        const dataUrl = canvas.toDataURL("image/jpeg", jpegQuality);
+        rendered.push(dataUrlToUint8Array(dataUrl));
+      }
+
+      return rendered;
     }
 
     async function tryDelete(path) {
@@ -358,18 +581,64 @@
       } catch {}
     }
 
-    async function clearFfmpegFiles(frameEntries) {
+    async function clearFfmpegFiles(maxFrameCount) {
       await tryDelete("output.mp4");
-
-      for (let i = 0; i < frameEntries.length; i++) {
+      for (let i = 0; i < maxFrameCount; i++) {
         await tryDelete(`frame_${String(i).padStart(6, "0")}.jpg`);
-        await tryDelete(`frame_${String(i).padStart(6, "0")}.png`);
       }
     }
 
-    async function convertZipToMp4() {
+    function updatePreviewThumbs(images) {
+      thumbs.innerHTML = "";
+      const previewItems = images.slice(0, 8);
+      for (const item of previewItems) {
+        const div = document.createElement("div");
+        div.className = "thumb";
+
+        const img = document.createElement("img");
+        img.src = URL.createObjectURL(item.blob);
+
+        const span = document.createElement("span");
+        span.textContent = item.name;
+
+        div.appendChild(img);
+        div.appendChild(span);
+        thumbs.appendChild(div);
+      }
+    }
+
+    async function prepareFrames(images, fps, duration, interpolateMode, width, height, fitMode, jpegQuality) {
+      const targetFrameTotal = Math.max(1, Math.round(fps * duration));
+
+      if (!interpolateMode) {
+        const prepared = [];
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+
+        for (let i = 0; i < images.length; i++) {
+          ctx.clearRect(0, 0, width, height);
+          drawFit(ctx, images[i].image, width, height, fitMode);
+          const dataUrl = canvas.toDataURL("image/jpeg", jpegQuality);
+          prepared.push(dataUrlToUint8Array(dataUrl));
+        }
+
+        return prepared;
+      }
+
+      return renderInterpolatedFrames(images, targetFrameTotal, width, height, fitMode, jpegQuality);
+    }
+
+    async function encodeToMp4() {
       const zipFile = zipFileInput.files?.[0];
       const fps = Number(fpsInput.value);
+      const duration = Number(durationInput.value);
+      const width = Number(outWidthInput.value);
+      const height = Number(outHeightInput.value);
+      const jpegQuality = Number(jpegQualityInput.value);
+      const interpolateMode = interpolateModeInput.checked;
+      const fitMode = fitModeInput.value;
       let outputName = outputNameInput.value.trim();
 
       if (!ffmpegLoaded) {
@@ -383,7 +652,22 @@
       }
 
       if (!Number.isFinite(fps) || fps < 1 || fps > 120) {
-        setStatus("FPS must be a number between 1 and 120.");
+        setStatus("FPS must be between 1 and 120.");
+        return;
+      }
+
+      if (!Number.isFinite(duration) || duration < 1 || duration > 300) {
+        setStatus("Duration must be between 1 and 300 seconds.");
+        return;
+      }
+
+      if (!Number.isFinite(width) || width < 64 || width > 4096 || !Number.isFinite(height) || height < 64 || height > 4096) {
+        setStatus("Output resolution is invalid.");
+        return;
+      }
+
+      if (!Number.isFinite(jpegQuality) || jpegQuality < 0.5 || jpegQuality > 1) {
+        setStatus("JPEG quality must be between 0.5 and 1.");
         return;
       }
 
@@ -412,29 +696,46 @@
         setStatus("Reading ZIP file...");
         zipState.textContent = `ZIP: ${zipFile.name}`;
 
-        const frameEntries = await extractFramesFromZip(zipFile);
-        frameCount.textContent = `Frames: ${frameEntries.length}`;
+        const entries = await extractImagesFromZip(zipFile);
+        imageCount.textContent = `Images: ${entries.length}`;
 
-        await clearFfmpegFiles(frameEntries);
+        setStatus(`Decoding ${entries.length} images...`);
+        const images = await readZipImages(entries);
+        updatePreviewThumbs(images);
 
-        const extension = frameEntries[0].name.toLowerCase().endsWith(".png") ? "png" : "jpg";
+        const targetFrameTotal = interpolateMode ? Math.max(1, Math.round(fps * duration)) : images.length;
+        frameCount.textContent = `Frames to encode: ${targetFrameTotal}`;
 
-        for (let i = 0; i < frameEntries.length; i++) {
-          const entry = frameEntries[i];
-          const data = await entry.async("uint8array");
-          const targetName = `frame_${String(i).padStart(6, "0")}.${extension}`;
-          await ffmpeg.writeFile(targetName, data);
-          const uploadProgress = ((i + 1) / frameEntries.length) * 35;
-          setProgress(uploadProgress);
-          setStatus(`Loaded frame ${i + 1} of ${frameEntries.length}: ${entry.name}`);
+        setStatus("Preparing frames...");
+        setProgress(10);
+
+        const preparedFrames = await prepareFrames(
+          images,
+          fps,
+          duration,
+          interpolateMode,
+          width,
+          height,
+          fitMode,
+          jpegQuality
+        );
+
+        await clearFfmpegFiles(preparedFrames.length);
+
+        for (let i = 0; i < preparedFrames.length; i++) {
+          const targetName = `frame_${String(i).padStart(6, "0")}.jpg`;
+          await ffmpeg.writeFile(targetName, preparedFrames[i]);
+          const writeProgress = 10 + ((i + 1) / preparedFrames.length) * 30;
+          setProgress(writeProgress);
+          setStatus(`Writing frame ${i + 1} of ${preparedFrames.length}...`);
         }
 
         setStatus("Encoding MP4...");
-        setProgress(40);
+        setProgress(45);
 
         await ffmpeg.exec([
           "-framerate", String(fps),
-          "-i", `frame_%06d.${extension}`,
+          "-i", "frame_%06d.jpg",
           "-c:v", "libx264",
           "-pix_fmt", "yuv420p",
           "-movflags", "+faststart",
@@ -452,9 +753,8 @@
         downloadLink.href = currentOutputUrl;
         downloadLink.download = outputName;
         downloadLink.style.display = "inline-flex";
-
         setProgress(100);
-        setStatus(`Done. MP4 created successfully from ${frameEntries.length} frames at ${fps} fps.`);
+        setStatus(`Done. MP4 created successfully from ${preparedFrames.length} frames at ${fps} fps.`);
       } catch (error) {
         setProgress(0);
         setStatus("Conversion failed:\n" + (error?.message || String(error)));
@@ -464,27 +764,61 @@
     }
 
     loadBtn.addEventListener("click", loadFFmpeg);
-    convertBtn.addEventListener("click", convertZipToMp4);
+    convertBtn.addEventListener("click", encodeToMp4);
 
     zipFileInput.addEventListener("change", async () => {
       const zipFile = zipFileInput.files?.[0];
 
       if (!zipFile) {
         zipState.textContent = "ZIP: none";
-        frameCount.textContent = "Frames: 0";
+        imageCount.textContent = "Images: 0";
+        frameCount.textContent = "Frames to encode: 0";
+        thumbs.innerHTML = "";
         return;
       }
 
       zipState.textContent = `ZIP: ${zipFile.name}`;
 
       try {
-        const entries = await extractFramesFromZip(zipFile);
-        frameCount.textContent = `Frames: ${entries.length}`;
-        setStatus(`ZIP loaded. Found ${entries.length} image frames.`);
+        const entries = await extractImagesFromZip(zipFile);
+        imageCount.textContent = `Images: ${entries.length}`;
+        const fps = Number(fpsInput.value);
+        const duration = Number(durationInput.value);
+        const projected = interpolateModeInput.checked ? Math.max(1, Math.round(fps * duration)) : entries.length;
+        frameCount.textContent = `Frames to encode: ${projected}`;
+        setStatus(`ZIP loaded. Found ${entries.length} images.`);
       } catch (error) {
-        frameCount.textContent = "Frames: 0";
+        imageCount.textContent = "Images: 0";
+        frameCount.textContent = "Frames to encode: 0";
+        thumbs.innerHTML = "";
         setStatus("Could not read ZIP:\n" + (error?.message || String(error)));
       }
+    });
+
+    fpsInput.addEventListener("input", () => {
+      const fps = Number(fpsInput.value);
+      const duration = Number(durationInput.value);
+      if (Number.isFinite(fps) && Number.isFinite(duration)) {
+        const projected = interpolateModeInput.checked ? Math.max(1, Math.round(fps * duration)) : Number(imageCount.textContent.replace(/\D+/g, "")) || 0;
+        frameCount.textContent = `Frames to encode: ${projected}`;
+      }
+    });
+
+    durationInput.addEventListener("input", () => {
+      const fps = Number(fpsInput.value);
+      const duration = Number(durationInput.value);
+      if (Number.isFinite(fps) && Number.isFinite(duration)) {
+        const projected = interpolateModeInput.checked ? Math.max(1, Math.round(fps * duration)) : Number(imageCount.textContent.replace(/\D+/g, "")) || 0;
+        frameCount.textContent = `Frames to encode: ${projected}`;
+      }
+    });
+
+    interpolateModeInput.addEventListener("change", () => {
+      const fps = Number(fpsInput.value);
+      const duration = Number(durationInput.value);
+      const images = Number(imageCount.textContent.replace(/\D+/g, "")) || 0;
+      const projected = interpolateModeInput.checked ? Math.max(1, Math.round(fps * duration)) : images;
+      frameCount.textContent = `Frames to encode: ${projected}`;
     });
   </script>
 </body>
